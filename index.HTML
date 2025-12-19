@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dra. Valéria Moura | Sistema de Gestão Real</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,700&family=Montserrat:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Montserrat', sans-serif; color: white; background-color: #050505; margin: 0; }
+        .serif { font-family: 'Playfair Display', serif; }
+        .gold-text { color: #c5a059; }
+        .bg-gold { background-color: #c5a059; }
+        .luxury-card { background: rgba(15, 15, 15, 0.98); border: 1px solid rgba(197, 160, 89, 0.2); backdrop-filter: blur(20px); }
+        .main-bg {
+            background: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.99) 100%), 
+                        url('https://images.unsplash.com/photo-1629909613654-2871b8867599?auto=format&fit=crop&q=80&w=1800');
+            background-size: cover; background-position: center; background-attachment: fixed; min-height: 100vh;
+        }
+        input {
+            background: rgba(255, 255, 255, 0.05) !important; border: none !important;
+            border-bottom: 1px solid rgba(197, 160, 89, 0.3) !important; color: white !important;
+            outline: none; width: 100%; padding: 12px !important; font-size: 13px !important;
+        }
+        /* AGENDA SEMANAL GESTÃO */
+        .weekly-grid { display: grid; grid-template-columns: 80px repeat(7, 1fr); background: #111; border: 1px solid #333; }
+        .grid-header { background: #1a1a1a; border-bottom: 1px solid #333; padding: 12px; text-align: center; font-size: 11px; font-weight: bold; color: #666; }
+        .time-label { border-right: 1px solid #333; border-bottom: 1px solid #222; padding: 15px 5px; font-size: 10px; color: #444; text-align: center; height: 65px; }
+        .grid-cell { border-right: 1px solid #222; border-bottom: 1px solid #222; height: 65px; position: relative; cursor: cell; }
+        .event-card { position: absolute; inset: 2px; padding: 4px; border-radius: 4px; font-size: 10px; font-weight: bold; color: black; line-height: 1.2; overflow: hidden; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .ev-barcelona { background: #c5a059; } .ev-vitoria { background: #ffffff; }
+        .ev-blocked { background: #331111; color: #ff4444; border: 1px solid #ff4444; font-size: 8px; }
+
+        /* CALENDÁRIO PACIENTE */
+        .calendar-container { max-width: 280px; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        .day-box { aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; background: rgba(255,255,255,0.02); }
+        .day-box.selected { background: #c5a059; color: black; font-weight: bold; }
+        .day-box.disabled { opacity: 0.1; cursor: not-allowed; }
+        .unit-card { border: 1px solid rgba(197, 160, 89, 0.2); cursor: pointer; transition: 0.3s; padding: 15px; border-radius: 8px; text-align: center; }
+        .unit-card.active { border-color: #c5a059; background: rgba(197, 160, 89, 0.1); }
+    </style>
+</head>
+<body class="main-bg flex flex-col min-h-screen">
+
+    <nav class="p-6 flex justify-between items-center max-w-7xl mx-auto w-full">
+        <div class="text-xl font-bold tracking-tighter serif uppercase cursor-pointer" onclick="location.reload()">Dra. Valéria Moura</div>
+        <div id="nav-user" class="text-[9px] gold-text font-bold uppercase tracking-widest"></div>
+    </nav>
+
+    <div class="flex-grow">
+        <section id="auth-view" class="max-w-md mx-auto px-6 pt-10">
+            <div class="luxury-card p-10 rounded-2xl shadow-2xl">
+                <h2 class="serif text-3xl mb-8 gold-text text-center italic" id="auth-title">Acesso</h2>
+                <div id="login-form" class="space-y-6">
+                    <input type="email" id="log-email" placeholder="E-mail">
+                    <input type="password" id="log-pass" placeholder="Senha">
+                    <button onclick="handleLogin()" class="w-full bg-gold text-black py-4 font-bold uppercase text-[10px] hover:bg-white transition-all shadow-lg">Entrar</button>
+                    <button onclick="toggleAuth(true)" class="w-full text-[9px] uppercase tracking-widest opacity-60">Criar Novo Registro</button>
+                </div>
+                <div id="reg-form" class="hidden space-y-4">
+                    <input type="text" id="reg-nome" placeholder="Nome Completo">
+                    <input type="email" id="reg-email" placeholder="E-mail">
+                    <input type="tel" id="reg-tel" placeholder="Telefone">
+                    <input type="password" id="reg-pass" placeholder="Criar Senha">
+                    <button onclick="handleRegister()" class="w-full bg-white text-black py-4 font-bold uppercase text-[10px] hover:bg-gold transition-all">Cadastrar</button>
+                    <button onclick="toggleAuth(false)" class="w-full text-[9px] uppercase tracking-widest opacity-60">Voltar</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="client-view" class="hidden max-w-7xl mx-auto px-6 py-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-4 space-y-6">
+                    <div class="luxury-card p-8 text-center">
+                        <h3 class="serif text-2xl mb-1 gold-text italic" id="client-name"></h3>
+                        <button onclick="logout()" class="text-[8px] opacity-40 hover:text-red-500 uppercase font-bold tracking-widest">Sair</button>
+                    </div>
+                    <div class="luxury-card p-8">
+                        <h4 class="text-[9px] gold-text font-bold uppercase mb-4 border-b border-white/5 pb-2">Minha Agenda</h4>
+                        <div id="client-list" class="space-y-4 text-[10px]"></div>
+                    </div>
+                </div>
+                <div class="lg:col-span-8 luxury-card p-10">
+                    <h2 class="serif text-3xl mb-10 italic">Novo Agendamento</h2>
+                    <div class="grid grid-cols-2 gap-4 mb-10">
+                        <div onclick="setU('Barcelona')" id="ub" class="unit-card">
+                            <h4 class="font-bold text-xs uppercase italic">Barcelona</h4>
+                        </div>
+                        <div onclick="setU('Vitoria')" id="uv" class="unit-card">
+                            <h4 class="font-bold text-xs uppercase italic">Enseada</h4>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <div class="calendar-container"> 
+                            <div class="flex justify-between items-center mb-6 text-[11px] gold-text font-bold tracking-widest">
+                                <button onclick="changeMonth(-1)">←</button>
+                                <span id="month-label"></span>
+                                <button onclick="changeMonth(1)">→</button>
+                            </div>
+                            <div id="calendar-days" class="calendar-grid"></div>
+                        </div>
+                        <div id="time-grid-container" class="opacity-10 pointer-events-none transition-opacity">
+                            <div id="time-grid" class="grid grid-cols-2 gap-3"></div>
+                        </div>
+                    </div>
+                    <button onclick="book()" class="w-full mt-12 bg-gold text-black py-5 font-bold uppercase text-[11px] hover:bg-white transition-all">Solicitar Horário</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="admin-view" class="hidden max-w-[98%] mx-auto px-6 py-6 animate-fade-in">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="luxury-card p-6 text-center">
+                    <p class="text-[9px] uppercase opacity-40 mb-2 font-bold">Total</p>
+                    <p class="text-3xl serif gold-text" id="stat-total">0</p>
+                </div>
+                <div class="luxury-card p-6 text-center border-gold/40">
+                    <p class="text-[9px] uppercase opacity-40 mb-2 italic">Pendentes</p>
+                    <p class="text-3xl serif text-white" id="stat-pend">0</p>
+                </div>
+                <div class="luxury-card p-6 text-center">
+                    <p class="text-[9px] uppercase opacity-40 mb-2 font-bold">Serra</p>
+                    <p class="text-3xl serif text-white" id="stat-serra">0</p>
+                </div>
+                <div class="luxury-card p-6 text-center">
+                    <p class="text-[9px] uppercase opacity-40 mb-2 font-bold">Vitória</p>
+                    <p class="text-3xl serif text-white" id="stat-vitoria">0</p>
+                </div>
+            </div>
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="serif text-3xl italic gold-text">Gestão Comercial</h2>
+                <button onclick="logout()" class="text-[9px] border border-white/30 px-6 py-2 uppercase hover:bg-red-500 transition-all">Encerrar Gestão</button>
+            </div>
+            <div class="luxury-card overflow-hidden mb-8 shadow-2xl">
+                <div class="weekly-grid" id="admin-grid"></div>
+            </div>
+            <div class="luxury-card p-6 overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="text-[9px] uppercase gold-text tracking-widest border-b border-white/10">
+                        <tr>
+                            <th class="p-4">Paciente</th>
+                            <th class="p-4">Data/Hora</th>
+                            <th class="p-4">Unidade</th>
+                            <th class="p-4">Status</th>
+                            <th class="p-4 text-right">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-table-body" class="text-xs opacity-90"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <footer class="mt-20 border-t border-white/5 py-12 px-10 bg-black/50">
+        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 text-center md:text-left">
+            <div><h4 class="serif text-xl italic mb-4 gold-text">Serra</h4><p class="text-[10px] opacity-40 uppercase font-bold">Barcelona, Serra - ES</p></div>
+            <div><h4 class="serif text-xl italic mb-4 gold-text">Vitória</h4><p class="text-[10px] opacity-40 uppercase font-bold">Enseada do Suá, Vitória - ES</p></div>
+            <div><h4 class="serif text-xl italic mb-4 gold-text">Atendimento</h4><p class="text-[10px] opacity-40 uppercase font-bold">Seg - Sex | 08h - 19h</p></div>
+            <div class="flex flex-col items-center md:items-start justify-center">
+                <p class="text-[8px] opacity-20 uppercase tracking-[0.4em] mb-4">© 2025 Dra. Valéria Moura</p>
+                <button onclick="handleLoginDirect('admin@admin.com', 'admin')" class="text-[8px] gold-text border border-gold/30 px-6 py-2 hover:bg-gold hover:text-black transition uppercase font-bold tracking-widest">Painel Administrativo</button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // --- COLOQUE SUAS CHAVES AQUI ---
+        const SUPABASE_URL = 'https://mmhqvbchlqwxyspbrmdc.supabase.co'; 
+        const SUPABASE_KEY = 'sb_publishable_ktwQs1mFiMmKWK_k3rTcrQ_YYhR-i6W'; 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let appointments = [];
+        let blockedSlots = [];
+        let user = JSON.parse(localStorage.getItem('valeria_session_v11')) || null;
+        let cMonth = new Date().getMonth(), cYear = new Date().getFullYear();
+        let sUnit = null, sDate = null, sHour = null, sDayIdx = null;
+
+        window.onload = async () => {
+            await fetchData();
+            if(user) showView();
+        };
+
+        async function fetchData() {
+            const { data: appts } = await supabaseClient.from('appointments').select('*');
+            appointments = appts || [];
+            const { data: blocks } = await supabaseClient.from('blocked_slots').select('*');
+            blockedSlots = blocks || [];
+            if (user && user.role === 'admin') renderAdmin();
+            if (user && user.role === 'client') { renderCal(); renderList(); }
+        }
+
+        async function handleLogin() {
+            const e = document.getElementById('log-email').value, s = document.getElementById('log-pass').value;
+            handleLoginDirect(e, s);
+        }
+
+        function handleLoginDirect(e, s) {
+            if(e === 'admin@admin.com' && s === 'admin') user = { role: 'admin', name: 'Dra. Valéria' };
+            else if(e && s) user = { role: 'client', name: e.split('@')[0], email: e };
+            else return alert("Dados incorretos.");
+            localStorage.setItem('valeria_session_v11', JSON.stringify(user));
+            showView();
+        }
+
+        async function handleRegister() {
+            const n = document.getElementById('reg-nome').value, e = document.getElementById('reg-email').value, s = document.getElementById('reg-pass').value;
+            if(!n || !e || !s) return alert("Preencha tudo.");
+            user = { role: 'client', name: n, email: e };
+            localStorage.setItem('valeria_session_v11', JSON.stringify(user));
+            showView();
+        }
+
+        function showView() {
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('nav-user').innerText = `Acesso: ${user.name}`;
+            if(user.role === 'admin') {
+                document.getElementById('admin-view').classList.remove('hidden');
+                document.getElementById('client-view').classList.add('hidden');
+                renderAdmin();
+            } else {
+                document.getElementById('client-view').classList.remove('hidden');
+                document.getElementById('admin-view').classList.add('hidden');
+                document.getElementById('client-name').innerText = user.name;
+                renderCal(); renderList();
+            }
+        }
+
+        function logout() { localStorage.removeItem('valeria_session_v11'); location.reload(); }
+
+        function setU(u) { sUnit = u; document.querySelectorAll('.unit-card').forEach(c=>c.classList.remove('active')); document.getElementById(u==='Barcelona'?'ub':'uv').classList.add('active'); }
+
+        function renderCal() {
+            const grid = document.getElementById('calendar-days'), label = document.getElementById('month-label');
+            const months = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+            grid.innerHTML = ''; label.innerText = `${months[cMonth]} ${cYear}`;
+            const first = new Date(cYear, cMonth, 1).getDay(), days = new Date(cYear, cMonth + 1, 0).getDate();
+            const today = new Date(); today.setHours(0,0,0,0);
+            for(let i=0; i<first; i++) grid.innerHTML += '<div class="day-box opacity-0 pointer-events-none"></div>';
+            for(let d=1; d<=days; d++) {
+                const date = new Date(cYear, cMonth, d);
+                const isPast = date < today;
+                const div = document.createElement('div');
+                div.className = `day-box ${isPast ? 'disabled' : ''}`;
+                div.innerText = d;
+                if(!isPast) div.onclick = () => {
+                    document.querySelectorAll('.day-box').forEach(b => b.classList.remove('selected'));
+                    div.classList.add('selected'); sDate = `${d}/${cMonth+1}/${cYear}`; sDayIdx = date.getDay(); renderTimeGrid();
+                };
+                grid.appendChild(div);
+            }
+        }
+
+        function changeMonth(s) { cMonth += s; if(cMonth>11){cMonth=0;cYear++} else if(cMonth<0){cMonth=11;cYear--} renderCal(); }
+
+        function renderTimeGrid() {
+            const grid = document.getElementById('time-grid');
+            document.getElementById('time-grid-container').classList.remove('opacity-10', 'pointer-events-none');
+            grid.innerHTML = '';
+            ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00"].forEach(h => {
+                const isBlocked = blockedSlots.some(b => b.day_idx === sDayIdx && b.hour === h);
+                const isTaken = appointments.some(a => a.appointment_date === sDate && a.appointment_hour === h && a.status === 'Confirmada');
+                const b = document.createElement('button');
+                b.className = `text-[10px] border border-white/5 py-3 uppercase ${(isBlocked || isTaken) ? 'opacity-20 cursor-not-allowed' : 'hover:bg-gold hover:text-black'}`;
+                b.innerText = h;
+                b.disabled = (isBlocked || isTaken);
+                if(!b.disabled) b.onclick = () => {
+                    document.querySelectorAll('#time-grid button').forEach(x => {x.style.background = 'none'; x.style.color = 'white'});
+                    b.style.background = '#c5a059'; b.style.color = 'black'; sHour = h;
+                };
+                grid.appendChild(b);
+            });
+        }
+
+        async function book() {
+            if(!sUnit || !sDate || !sHour) return alert("Selecione tudo.");
+            const { error } = await supabaseClient.from('appointments').insert([{
+                user_name: user.name, email: user.email, appointment_date: sDate, appointment_hour: sHour, unit: sUnit, day_idx: sDayIdx
+            }]);
+            if(error) alert("Erro: " + error.message);
+            else { alert("Solicitado!"); await fetchData(); }
+        }
+
+        function renderList() {
+            const list = document.getElementById('client-list');
+            const my = appointments.filter(a => a.user_name === user.name || a.email === user.email);
+            list.innerHTML = my.map(a => `<div class="mb-2 p-2 bg-white/5 border-l-2 border-gold rounded-sm"><p class="font-bold gold-text">${a.appointment_date} - ${a.appointment_hour}</p><p class="opacity-40 text-[8px] uppercase">${a.status}</p></div>`).join('');
+        }
+
+        function renderAdmin() {
+            document.getElementById('stat-total').innerText = appointments.length;
+            document.getElementById('stat-pend').innerText = appointments.filter(a => a.status === 'Pendente').length;
+            document.getElementById('stat-serra').innerText = appointments.filter(a => a.unit === 'Barcelona').length;
+            document.getElementById('stat-vitoria').innerText = appointments.filter(a => a.unit === 'Vitoria').length;
+
+            const grid = document.getElementById('admin-grid');
+            const days = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+            const hrs = ["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"];
+            let html = `<div class="grid-header">Hora</div>` + days.map(d => `<div class="grid-header">${d}</div>`).join('');
+            hrs.forEach(h => {
+                html += `<div class="time-label">${h}</div>`;
+                for(let d=0; d<7; d++) {
+                    const found = appointments.filter(a => a.appointment_hour === h && a.day_idx === d);
+                    const isBlocked = blockedSlots.some(b => b.day_idx === d && b.hour === h);
+                    html += `<div class="grid-cell" onclick="handleBlock(${d}, '${h}')">
+                        ${found.map(a => `<div class="event-card ${a.unit==='Barcelona'?'ev-barcelona':'ev-vitoria'}" onclick="event.stopPropagation(); confirmAdmin('${a.id}')">${a.user_name.split(' ')[0]}</div>`).join('')}
+                        ${isBlocked ? `<div class="event-card ev-blocked">BLOQ</div>` : ''}
+                    </div>`;
+                }
+            });
+            grid.innerHTML = html;
+
+            const tableBody = document.getElementById('admin-table-body');
+            tableBody.innerHTML = appointments.map((a) => `
+                <tr class="border-b border-white/5">
+                    <td class="p-4 font-bold uppercase">${a.user_name}</td>
+                    <td class="p-4">${a.appointment_date}<br><span class="gold-text font-bold">${a.appointment_hour}</span></td>
+                    <td class="p-4 uppercase text-[9px]">${a.unit}</td>
+                    <td class="p-4 font-bold text-[9px] uppercase ${a.status==='Pendente'?'text-amber-500':'text-green-500'}">${a.status}</td>
+                    <td class="p-4 text-right">
+                        ${a.status === 'Pendente' ? `<button onclick="confirmAdmin('${a.id}')" class="bg-white text-black px-4 py-1 text-[8px] font-bold uppercase">Aceitar</button>` : `<button onclick="deleteApp('${a.id}')" class="text-red-500 px-3 text-[8px] font-bold">EXCLUIR</button>`}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function handleBlock(d, h) {
+            const existing = blockedSlots.find(b => b.day_idx === d && b.hour === h);
+            if(existing) { if(confirm("Desbloquear?")) await supabaseClient.from('blocked_slots').delete().eq('id', existing.id); }
+            else { if(confirm("Bloquear " + h + "?")) await supabaseClient.from('blocked_slots').insert([{ day_idx: d, hour: h }]); }
+            await fetchData();
+        }
+
+        async function confirmAdmin(id) {
+            await supabaseClient.from('appointments').update({ status: 'Confirmada' }).eq('id', id);
+            await fetchData();
+        }
+
+        async function deleteApp(id) {
+            if(confirm("Excluir agendamento?")) await supabaseClient.from('appointments').delete().eq('id', id);
+            await fetchData();
+        }
+
+        function toggleAuth(isReg) {
+            document.getElementById('auth-title').innerText = isReg ? 'Registro' : 'Acesso';
+            document.getElementById('login-form').classList.toggle('hidden', isReg);
+            document.getElementById('reg-form').classList.toggle('hidden', !isReg);
+        }
+    </script>
+</body>
+</html>
